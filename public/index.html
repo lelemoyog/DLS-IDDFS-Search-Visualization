@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DLS & IDDFS Visualization</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<style>
+body {background:#f8fafc; color:#0f172a; padding:20px;}
+.panel {background:#fff; padding:20px; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,0.1); margin-bottom:20px;}
+.steps {height:200px; overflow-y:auto; background:#f1f5f9; padding:10px; border-radius:8px;}
+.node-rect {stroke:#333;stroke-width:1;}
+.unvisited {fill:#eef2ff;}
+.visited {fill:#fde68a;}
+.found {fill:#bbf7d0;}
+.svg-container {overflow:visible; display:flex; justify-content:center;}
+svg {background:#fff; border-radius:12px; display:block;}
+.student-list {display:flex; flex-wrap:wrap; gap:8px;}
+.student-list .student {background:#eef2ff; padding:6px 10px; border-radius:6px; font-size:13px;}
+</style>
+</head>
+<body>
+<div class="container-fluid">
+  <h2 class="mb-4">DLS & IDDFS Search Visualization</h2>
+
+  <div class="panel mb-3">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">Algorithm</label>
+        <select id="alg" class="form-select">
+          <option>DLS</option>
+          <option>IDDFS</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Search Student</label>
+        <input id="query" type="text" class="form-control" placeholder="Student 1">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Depth / MaxDepth</label>
+        <input id="limit" type="number" class="form-control" value="4">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Speed (ms)</label>
+        <input id="speed" type="number" class="form-control" value="300">
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button class="btn btn-primary" onclick="startSearch()">Start Search</button>
+        <button class="btn btn-secondary" onclick="resetTree()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel mb-3 svg-container">
+    <svg id="treeSvg"></svg>
+  </div>
+
+  <div class="panel mb-3">
+    <strong>📖 What Happened — Step-by-Step Explanation:</strong>
+    <div id="explanation" class="mt-2 p-3 bg-light rounded" style="min-height:60px;">
+      <span class="text-muted">Run a search to see a detailed explanation of what the algorithm did!</span>
+    </div>
+  </div>
+
+  <div class="panel mb-3">
+    <div class="d-flex justify-content-between align-items-center">
+      <strong>Traversal Steps:</strong>
+      <div class="d-flex align-items-center gap-3">
+        <span id="resultBadge" class="badge d-none" style="font-size:14px;"></span>
+        <strong>Steps Count: <span id="stepsCount">0</span></strong>
+      </div>
+    </div>
+    <div id="log" class="steps mt-2"></div>
+  </div>
+
+  <div class="panel mb-3">
+    <strong>Time & Space Complexity:</strong>
+    <div id="complexity" class="mt-2"></div>
+  </div>
+
+  <div class="panel">
+    <strong>All Students:</strong>
+    <div id="allStudents" class="student-list mt-2"></div>
+  </div>
+
+  <div class="panel">
+    <strong>📚 Teaching Notes</strong>
+    <div class="mt-3">
+      <h6 class="text-primary">What is DLS (Depth-Limited Search)?</h6>
+      <p>DLS is a variation of Depth-First Search (DFS) that limits how deep the algorithm can go. It explores nodes by going as deep as possible along each branch, but stops at a specified depth limit. This prevents infinite loops in graphs with cycles and controls memory usage.</p>
+      <ul>
+        <li><strong>Key Idea:</strong> "Go deep, but not too deep!"</li>
+        <li><strong>Depth Limit:</strong> The maximum number of levels the algorithm will explore from the root</li>
+        <li><strong>Limitation:</strong> May miss the goal if it exists beyond the depth limit</li>
+      </ul>
+
+      <h6 class="text-primary mt-4">What is IDDFS (Iterative Deepening Depth-First Search)?</h6>
+      <p>IDDFS combines the benefits of BFS (finding shortest path) and DFS (memory efficiency). It repeatedly runs DLS with increasing depth limits (0, 1, 2, 3...) until the goal is found.</p>
+      <ul>
+        <li><strong>Key Idea:</strong> "Try shallow first, then go deeper!"</li>
+        <li><strong>Completeness:</strong> Will always find a solution if one exists (unlike DLS)</li>
+        <li><strong>Optimality:</strong> Finds the shallowest goal first</li>
+      </ul>
+
+      <h6 class="text-primary mt-4">Time & Space Complexity</h6>
+      <table class="table table-bordered table-sm mt-2">
+        <thead class="table-light">
+          <tr><th>Algorithm</th><th>Time</th><th>Space</th><th>Complete?</th><th>Optimal?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>DLS</td><td>O(b<sup>l</sup>)</td><td>O(l)</td><td>No</td><td>No</td></tr>
+          <tr><td>IDDFS</td><td>O(b<sup>d</sup>)</td><td>O(d)</td><td>Yes</td><td>Yes*</td></tr>
+        </tbody>
+      </table>
+      <small class="text-muted">b = branching factor, l = depth limit, d = depth of solution. *Optimal when path cost = depth.</small>
+
+      <h6 class="text-primary mt-4">💻 The Actual Code — How It Works</h6>
+      
+      <div class="card mb-3">
+        <div class="card-header bg-dark text-white">DLS (Depth-Limited Search) Function</div>
+        <div class="card-body">
+          <pre class="bg-light p-3 rounded" style="font-size:13px; overflow-x:auto;"><code>function DLS(node, target, limit) {
+    // Step 1: Check if current node is the goal
+    if (node.label === target) {
+        return node;  // 🎉 Found it!
+    }
+    
+    // Step 2: Check if we've hit our depth limit
+    if (limit <= 0) {
+        return null;  // 🛑 Can't go deeper
+    }
+    
+    // Step 3: Recursively search all children
+    for (const child of node.children) {
+        const result = DLS(child, target, limit - 1);  // ⬇️ Go deeper (limit decreases)
+        if (result) {
+            return result;  // 🎉 Found in subtree!
+        }
+    }
+    
+    // Step 4: Not found in this branch
+    return null;
+}</code></pre>
+          <div class="mt-3">
+            <strong>How it works step-by-step:</strong>
+            <ol class="mt-2">
+              <li><strong>Base Case 1 (Success):</strong> If current node matches target → return it!</li>
+              <li><strong>Base Case 2 (Depth Limit):</strong> If limit reaches 0 → stop exploring this path</li>
+              <li><strong>Recursive Case:</strong> For each child, call DLS with <code>limit - 1</code></li>
+              <li><strong>Backtrack:</strong> If no child returns a result, return null (try next sibling)</li>
+            </ol>
+            <div class="alert alert-info mt-2 mb-0" style="font-size:13px;">
+              <strong>🔑 Key Insight:</strong> The <code>limit - 1</code> is crucial! Each level deeper decreases the limit by 1, ensuring we never exceed our depth constraint.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-dark text-white">IDDFS (Iterative Deepening DFS) Function</div>
+        <div class="card-body">
+          <pre class="bg-light p-3 rounded" style="font-size:13px; overflow-x:auto;"><code>function IDDFS(root, target, maxDepth) {
+    // Try increasing depth limits: 0, 1, 2, 3, ...
+    for (let depth = 0; depth <= maxDepth; depth++) {
+        console.log("Trying depth limit:", depth);
+        
+        const result = DLS(root, target, depth);  // 🔄 Reuse DLS!
+        
+        if (result) {
+            return result;  // 🎉 Found at this depth!
+        }
+    }
+    
+    // Not found even at maxDepth
+    return null;
+}</code></pre>
+          <div class="mt-3">
+            <strong>How it works step-by-step:</strong>
+            <ol class="mt-2">
+              <li><strong>Start shallow:</strong> First try depth = 0 (only check root)</li>
+              <li><strong>Gradually increase:</strong> Then depth = 1, 2, 3... up to maxDepth</li>
+              <li><strong>Reuse DLS:</strong> Each iteration just calls DLS with a new limit</li>
+              <li><strong>Stop early:</strong> As soon as DLS finds something, we're done!</li>
+            </ol>
+            <div class="alert alert-warning mt-2 mb-0" style="font-size:13px;">
+              <strong>🔑 Key Insight:</strong> IDDFS is just a wrapper that calls DLS multiple times! It's elegant because it reuses the simpler DLS function.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-success text-white">🔍 Trace Example: DLS("Student 4", limit=2)</div>
+        <div class="card-body" style="font-size:13px;">
+          <pre class="bg-light p-3 rounded" style="overflow-x:auto;">DLS(University, "Student 4", 2)
+│   Check: "University" = "Student 4"? No
+│   limit=2 > 0, so explore children...
+│
+├── DLS(Classroom A, "Student 4", 1)
+│   │   Check: "Classroom A" = "Student 4"? No
+│   │   limit=1 > 0, so explore children...
+│   │
+│   ├── DLS(Student 1, "Student 4", 0)
+│   │       Check: "Student 1" = "Student 4"? No
+│   │       limit=0! 🛑 STOP - return null
+│   │
+│   ├── DLS(Student 2, "Student 4", 0)
+│   │       Check: "Student 2" = "Student 4"? No
+│   │       limit=0! 🛑 STOP - return null
+│   │
+│   └── return null (no children matched)
+│
+├── DLS(Classroom B, "Student 4", 1)
+│   │   ... similar process ...
+│
+Result: null (Student 4 is at depth 3, but limit was 2!)</pre>
+          <div class="alert alert-danger mt-2 mb-0">
+            <strong>Why it failed:</strong> "Student 4" exists at depth 3, but our limit was only 2. DLS stopped before reaching it! This is why IDDFS is useful — it would eventually try limit=3 and find it.
+          </div>
+        </div>
+      </div>
+
+      <h6 class="text-primary mt-4">🎯 Demo Tips for Your Classmates</h6>
+      <ol>
+        <li><strong>Show DLS limitation:</strong> Search for "Student 20" with depth limit 2 — it won't be found!</li>
+        <li><strong>Show IDDFS advantage:</strong> Same search with IDDFS will find it by gradually increasing depth</li>
+        <li><strong>Compare step counts:</strong> Notice how IDDFS may revisit nodes but still finds the answer</li>
+        <li><strong>Explain the colors:</strong> Yellow = currently visiting, Green = found</li>
+      </ol>
+
+      <h6 class="text-primary mt-4">🤔 Discussion Questions & Answers</h6>
+      <div class="accordion" id="questionsAccordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q1">
+              1. Why might we choose DLS over regular DFS?
+            </button>
+          </h2>
+          <div id="q1" class="accordion-collapse collapse" data-bs-parent="#questionsAccordion">
+            <div class="accordion-body">
+              <strong>Answer:</strong> Regular DFS can get stuck in infinite loops when dealing with graphs that have cycles, or waste time exploring very deep branches that don't contain the solution. DLS prevents this by setting a maximum depth. It's also useful when we have domain knowledge about where the solution likely exists (e.g., "the answer is probably within 5 levels").
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q2">
+              2. IDDFS revisits nodes multiple times — why is it still efficient?
+            </button>
+          </h2>
+          <div id="q2" class="accordion-collapse collapse" data-bs-parent="#questionsAccordion">
+            <div class="accordion-body">
+              <strong>Answer:</strong> Most nodes in a tree are at the deepest level! In a tree with branching factor b, the bottom level has more nodes than all other levels combined. IDDFS only revisits the smaller upper levels, while the large bottom level is visited just once. The overhead is only about 11% for b=10. Plus, it uses O(d) memory vs O(b<sup>d</sup>) for BFS — a huge savings!
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q3">
+              3. When would BFS be better than IDDFS?
+            </button>
+          </h2>
+          <div id="q3" class="accordion-collapse collapse" data-bs-parent="#questionsAccordion">
+            <div class="accordion-body">
+              <strong>Answer:</strong> BFS is better when: (1) Memory is not a concern and the search space is small, (2) You need to find ALL nodes at a certain depth, not just one, (3) The graph is very shallow but extremely wide — IDDFS overhead becomes noticeable, (4) You're working with a graph where revisiting nodes is expensive (though both can use visited sets).
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q4">
+              4. What happens if we set depth limit to 0 in DLS?
+            </button>
+          </h2>
+          <div id="q4" class="accordion-collapse collapse" data-bs-parent="#questionsAccordion">
+            <div class="accordion-body">
+              <strong>Answer:</strong> With depth limit 0, DLS only checks the root node! It won't explore any children. This is actually useful in IDDFS — the first iteration (depth=0) quickly checks if the root itself is the goal before spending time on deeper searches. Try it: search for "University" with depth 0 — it will be found!
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Tree ----------
+function createTree() {
+  const root = {label:'University', children:[]};
+  let id = 1;
+  for(let c=1;c<=3;c++){
+    const cls = {label:'Classroom '+String.fromCharCode(64+c), children:[]};
+    for(let l1=0;l1<2;l1++){
+      const l1Node = {label:'Student '+id++, children:[]};
+      for(let l2=0;l2<2;l2++){
+        const l2Node = {label:'Student '+id++, children:[]};
+        for(let l3=0;l3<2;l3++){
+          l2Node.children.push({label:'Student '+id++, children:[]});
+        }
+        l1Node.children.push(l2Node);
+      }
+      cls.children.push(l1Node);
+    }
+    root.children.push(cls);
+  }
+  return root;
+}
+
+const tree = createTree();
+const svg = document.getElementById('treeSvg');
+const coords = new Map();
+
+// ---------- Layout ----------
+function layoutTree(root) {
+  const levels = [];
+  function walk(node, depth) {
+    if (!levels[depth]) levels[depth] = [];
+    levels[depth].push(node);
+    node.children.forEach(c => walk(c, depth + 1));
+  }
+  walk(root, 0);
+
+  const maxDepth = levels.length - 1;
+  const maxNodesInLevel = Math.max(...levels.map(l => l.length));
+  
+  const nodeW = 80, nodeH = 28, hGap = 30, vGap = 4;
+  const W = (maxDepth + 1) * (nodeW + hGap) + 50;
+  const H = maxNodesInLevel * (nodeH + vGap) + 40;
+  
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+
+  levels.forEach((nodes, depth) => {
+    const x = 50 + depth * (nodeW + hGap);
+    const totalHeight = nodes.length * (nodeH + vGap);
+    const startY = (H - totalHeight) / 2 + nodeH / 2;
+    
+    nodes.forEach((n, i) => {
+      coords.set(n, { x: x, y: startY + i * (nodeH + vGap) });
+    });
+  });
+}
+
+layoutTree(tree);
+
+// ---------- Draw ----------
+function drawTree(highlight=null,found=null) {
+  svg.innerHTML='';
+  coords.forEach((pos,node)=>{
+    node.children.forEach(c=>{
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      const p=pos,q=coords.get(c);
+      line.setAttribute('x1',p.x+35); line.setAttribute('y1',p.y);
+      line.setAttribute('x2',q.x-35); line.setAttribute('y2',q.y);
+      line.setAttribute('stroke','#cbd5e1'); line.setAttribute('stroke-width',2);
+      svg.appendChild(line);
+    });
+  });
+  coords.forEach((pos,node)=>{
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x',pos.x-35); rect.setAttribute('y',pos.y-15);
+    rect.setAttribute('width',70); rect.setAttribute('height',30); rect.setAttribute('rx',5);
+    if(node===found) rect.setAttribute('class','node-rect found');
+    else if(highlight===node) rect.setAttribute('class','node-rect visited');
+    else rect.setAttribute('class','node-rect unvisited');
+    svg.appendChild(rect);
+    const text=document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x',pos.x); text.setAttribute('y',pos.y+5);
+    text.setAttribute('text-anchor','middle'); text.setAttribute('font-size','11');
+    text.textContent=node.label;
+    svg.appendChild(text);
+  });
+}
+
+// ---------- Search ----------
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+const speedInput=document.getElementById('speed');
+let speed=parseInt(speedInput.value);
+speedInput.addEventListener('change',()=>{speed=parseInt(speedInput.value);});
+
+async function DLS(node,target,limit,steps=[],depth=0,trace=[]) {
+  steps.push(node);
+  trace.push({node:node.label, depth:depth, limit:limit, action:'visit'});
+  drawTree(node,null); 
+  await sleep(speed);
+  if(node.label.toLowerCase().includes(target.toLowerCase())) {
+    trace.push({node:node.label, depth:depth, limit:limit, action:'found'});
+    return {found:node, trace:trace};
+  }
+  if(limit<=0) {
+    trace.push({node:node.label, depth:depth, limit:limit, action:'limit_reached'});
+    return {found:null, trace:trace};
+  }
+  for(const c of node.children){
+    trace.push({node:node.label, depth:depth, action:'explore_child', child:c.label});
+    const res=await DLS(c,target,limit-1,steps,depth+1,trace);
+    if(res.found) return res;
+  }
+  trace.push({node:node.label, depth:depth, action:'backtrack'});
+  return {found:null, trace:trace};
+}
+
+async function IDDFS(root,target,maxDepth,steps=[]) {
+  let allTraces=[];
+  for(let depth=0;depth<=maxDepth;depth++){
+    const res=await DLS(root,target,depth,steps,0,[]);
+    allTraces.push({depthLimit:depth, trace:res.trace});
+    if(res.found) return {found:res.found, allTraces:allTraces, finalDepth:depth};
+  }
+  return {found:null, allTraces:allTraces, finalDepth:maxDepth};
+}
+
+async function startSearch(){
+  const alg=document.getElementById('alg').value;
+  const query=document.getElementById('query').value.trim();
+  let limit=parseInt(document.getElementById('limit').value);
+  if(!query) return alert('Enter a student name');
+
+  const logEl=document.getElementById('log'); logEl.innerHTML='';
+  const stepsCountEl=document.getElementById('stepsCount');
+  let steps=[]; let foundNode=null;
+
+  if(alg==='DLS') {
+    const res=await DLS(tree,query,limit,[],0,[]);
+    foundNode=res.found;
+    generateExplanation(alg,query,limit,res.trace,null,foundNode);
+    steps=res.trace.filter(t=>t.action==='visit').map(t=>({label:t.node}));
+  }
+  else if(alg==='IDDFS') {
+    const maxDepth=Math.max(limit,6);
+    const res=await IDDFS(tree,query,maxDepth,[]);
+    foundNode=res.found;
+    generateExplanation(alg,query,maxDepth,null,res.allTraces,foundNode,res.finalDepth);
+    res.allTraces.forEach(at=>{
+      at.trace.filter(t=>t.action==='visit').forEach(t=>steps.push({label:t.node}));
+    });
+  }
+
+  steps.forEach((n,i)=>{
+    const div=document.createElement('div');
+    div.textContent=(i+1)+'. '+n.label;
+    logEl.appendChild(div);
+  });
+
+  stepsCountEl.textContent=steps.length;
+  drawTree(foundNode,foundNode);
+
+  const badgeEl=document.getElementById('resultBadge');
+  badgeEl.classList.remove('d-none','bg-success','bg-danger');
+  if(foundNode){
+    badgeEl.textContent='✓ Found: '+foundNode.label;
+    badgeEl.classList.add('bg-success');
+  } else {
+    badgeEl.textContent='✗ Not Found';
+    badgeEl.classList.add('bg-danger');
+  }
+
+  const complexityEl=document.getElementById('complexity');
+  if(alg==='DLS') complexityEl.innerHTML='DLS: Time O(b<sup>l</sup>), Space O(l) — where b=branching factor, l=depth limit';
+  else complexityEl.innerHTML='IDDFS: Time O(b<sup>d</sup>), Space O(d) — where b=branching factor, d=depth of solution';
+}
+
+// ---------- All students (collect from tree) ----------
+const allEl=document.getElementById('allStudents');
+function collectStudents(node) {
+  if(node.label.startsWith('Student')) {
+    const div=document.createElement('div'); 
+    div.className='student';
+    div.textContent=node.label;
+    allEl.appendChild(div);
+  }
+  node.children.forEach(c => collectStudents(c));
+}
+collectStudents(tree);
+
+// ---------- Reset ----------
+function resetTree(){
+  drawTree();
+  document.getElementById('log').innerHTML='';
+  document.getElementById('stepsCount').textContent='0';
+  document.getElementById('complexity').innerHTML='';
+  document.getElementById('explanation').innerHTML='<span class="text-muted">Run a search to see a detailed explanation of what the algorithm did!</span>';
+  const badgeEl=document.getElementById('resultBadge');
+  badgeEl.classList.add('d-none');
+  badgeEl.classList.remove('bg-success','bg-danger');
+}
+
+function generateExplanation(alg,query,limit,trace,allTraces,foundNode,finalDepth){
+  const expEl=document.getElementById('explanation');
+  let html='';
+  
+  if(alg==='DLS'){
+    html+=`<h6>🔍 DLS Search for "${query}" with depth limit ${limit}</h6>`;
+    html+=`<div class="mb-2"><strong>Algorithm Started:</strong> Beginning Depth-Limited Search from the root node.</div>`;
+    
+    const visits=trace.filter(t=>t.action==='visit');
+    const limitHits=trace.filter(t=>t.action==='limit_reached');
+    const backtracks=trace.filter(t=>t.action==='backtrack');
+    
+    html+=`<div class="mb-2">`;
+    html+=`<strong>What happened:</strong><br>`;
+    html+=`• Visited <strong>${visits.length}</strong> nodes total<br>`;
+    html+=`• Hit depth limit <strong>${limitHits.length}</strong> times (stopped going deeper)<br>`;
+    html+=`• Backtracked <strong>${backtracks.length}</strong> times (tried different branches)<br>`;
+    html+=`</div>`;
+    
+    if(foundNode){
+      const foundTrace=trace.find(t=>t.action==='found');
+      html+=`<div class="alert alert-success mb-2">`;
+      html+=`<strong>✅ SUCCESS!</strong> Found "${foundNode.label}" at depth ${foundTrace.depth}.<br>`;
+      html+=`<small>The algorithm checked if each node matched "${query}". When it reached "${foundNode.label}", the condition <code>node.label === target</code> was TRUE, so it returned the node immediately.</small>`;
+      html+=`</div>`;
+    } else {
+      html+=`<div class="alert alert-danger mb-2">`;
+      html+=`<strong>❌ NOT FOUND</strong> within depth limit ${limit}.<br>`;
+      html+=`<small>The algorithm explored all reachable nodes within ${limit} levels but none matched "${query}". Every time it tried to go to level ${limit+1}, the condition <code>limit <= 0</code> was TRUE, so it stopped and backtracked.</small>`;
+      html+=`</div>`;
+      html+=`<div class="alert alert-info mb-0">`;
+      html+=`<strong>💡 Tip:</strong> The target might exist deeper in the tree! Try increasing the depth limit, or use IDDFS which will automatically try increasing depths.`;
+      html+=`</div>`;
+    }
+  }
+  else if(alg==='IDDFS'){
+    html+=`<h6>🔄 IDDFS Search for "${query}" with max depth ${limit}</h6>`;
+    html+=`<div class="mb-2"><strong>Algorithm Started:</strong> Beginning Iterative Deepening DFS. This will try DLS repeatedly with depth limits 0, 1, 2, 3...</div>`;
+    
+    html+=`<div class="mb-2"><strong>Iterations performed:</strong></div>`;
+    html+=`<div class="table-responsive"><table class="table table-sm table-bordered mb-2" style="font-size:12px;">`;
+    html+=`<thead><tr><th>Depth Limit</th><th>Nodes Visited</th><th>Result</th></tr></thead><tbody>`;
+    
+    allTraces.forEach((at,i)=>{
+      const visits=at.trace.filter(t=>t.action==='visit').length;
+      const wasFound=at.trace.some(t=>t.action==='found');
+      const result=wasFound?'<span class="text-success">✅ Found!</span>':'<span class="text-muted">Not found</span>';
+      html+=`<tr><td>${at.depthLimit}</td><td>${visits}</td><td>${result}</td></tr>`;
+    });
+    html+=`</tbody></table></div>`;
+    
+    const totalVisits=allTraces.reduce((sum,at)=>sum+at.trace.filter(t=>t.action==='visit').length,0);
+    
+    if(foundNode){
+      html+=`<div class="alert alert-success mb-2">`;
+      html+=`<strong>✅ SUCCESS!</strong> Found "${foundNode.label}" when depth limit reached ${finalDepth}.<br>`;
+      html+=`<small>IDDFS called <code>DLS(root, "${query}", ${finalDepth})</code> and it returned a match! The loop <code>for(depth=0; depth<=${limit}; depth++)</code> stopped early because we found the target.</small>`;
+      html+=`</div>`;
+      html+=`<div class="alert alert-info mb-0">`;
+      html+=`<strong>📊 Efficiency note:</strong> Total nodes visited across all iterations: <strong>${totalVisits}</strong>. Yes, we revisited some nodes, but this is okay! The overhead is small compared to the memory savings vs BFS.`;
+      html+=`</div>`;
+    } else {
+      html+=`<div class="alert alert-danger mb-2">`;
+      html+=`<strong>❌ NOT FOUND</strong> even after trying depths 0 through ${limit}.<br>`;
+      html+=`<small>IDDFS completed all ${allTraces.length} iterations of the loop but DLS never returned a match. Total nodes visited: <strong>${totalVisits}</strong>.</small>`;
+      html+=`</div>`;
+      html+=`<div class="alert alert-info mb-0">`;
+      html+=`<strong>💡 Tip:</strong> Either "${query}" doesn't exist in the tree, or you need to increase the max depth limit.`;
+      html+=`</div>`;
+    }
+  }
+  
+  expEl.innerHTML=html;
+}
+drawTree();
+</script>
+</body>
+</html>
