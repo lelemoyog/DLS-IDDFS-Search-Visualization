@@ -428,7 +428,7 @@ async function startSearch(){
     steps=res.trace.filter(t=>t.action==='visit').map(t=>({label:t.node}));
   }
   else if(alg==='IDDFS') {
-    const maxDepth=Math.max(limit,6);
+    const maxDepth=Math.max(limit);
     const res=await IDDFS(tree,query,maxDepth,[]);
     foundNode=res.found;
     generateExplanation(alg,query,maxDepth,null,res.allTraces,foundNode,res.finalDepth);
