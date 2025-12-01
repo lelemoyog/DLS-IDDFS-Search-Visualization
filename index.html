@@ -304,18 +304,30 @@ function BFS_Order(root, target){
   return visited;
 }
 
-// ---------- DFS (iterative stack) ----------
-function DFS_Order(root,target){
-  const stack=[root];
-  const visited=[];
-  while(stack.length){
-    const n=stack.pop();
+// ---------- DFS (iterative stack, STOPS when target found) ----------
+function DFS_Order(root, targetLabel) {
+  const stack = [root];
+  const visited = [];
+  const lowerTarget = targetLabel.toLowerCase();
+
+  while (stack.length) {
+    const n = stack.pop();
     visited.push(n);
-    // push children in reverse order to simulate recursive left-to-right
-    for(let i=n.children.length-1;i>=0;i--) stack.push(n.children[i]);
+
+    // STOP IMMEDIATELY when target is found
+    if (n.label.toLowerCase() === lowerTarget) {
+      return visited;   // return only the nodes visited up to this point
+    }
+
+    // push children in reverse order to maintain left-to-right order
+    for (let i = n.children.length - 1; i >= 0; i--) {
+      stack.push(n.children[i]);
+    }
   }
-  return visited;
+
+  return visited; // target not found
 }
+
 
 // ---------- UCS (priority queue by cumulative cost) ----------
 function UCS_Order(root,target){
